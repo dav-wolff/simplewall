@@ -1,0 +1,8 @@
+[package]
+name = "simplewall"
+version = "0.1.0-wip"
+edition = "2024"
+
+[dependencies]
+smithay-client-toolkit = { version = "0.20.0", default-features = false }
+wayland-client = "0.31.11"
