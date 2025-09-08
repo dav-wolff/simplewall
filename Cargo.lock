@@ -1036,7 +1036,7 @@ dependencies = [
 
 [[package]]
 name = "simplewall"
-version = "0.1.0-wip"
+version = "0.1.0"
 dependencies = [
  "clap",
  "fast_image_resize",

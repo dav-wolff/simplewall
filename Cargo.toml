@@ -1,7 +1,7 @@
 [package]
 name = "simplewall"
 description = "Simple wallpaper utility for Wayland compositors with layer shell support"
-version = "0.1.0-wip"
+version = "0.1.0"
 edition = "2024"
 authors = ["David Wolff"]
 license = "MIT"
