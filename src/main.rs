@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use wayland_client::{
 	Connection,
 	QueueHandle,
@@ -21,7 +23,12 @@ use smithay_client_toolkit::{
 	output::{OutputHandler, OutputState},
 };
 
+mod wallpaper;
+use wallpaper::Wallpaper;
+
 fn main() {
+	let wallpaper = Wallpaper::load(Path::new("wallpaper.jpg")).unwrap();
+	
 	let conn = Connection::connect_to_env().unwrap();
 	
 	let (globals, mut event_queue) = registry_queue_init(&conn).unwrap();
@@ -43,6 +50,7 @@ fn main() {
 	let pool = SlotPool::new(2560 * 1440 * 4, &shm).expect("failed to create pool");
 	
 	let mut simple_wall = SimpleWall {
+		wallpaper,
 		registry_state: RegistryState::new(&globals),
 		output_state: OutputState::new(&globals, &qh),
 		shm,
@@ -60,6 +68,7 @@ fn main() {
 }
 
 struct SimpleWall {
+	wallpaper: Wallpaper,
 	registry_state: RegistryState,
 	output_state: OutputState,
 	shm: Shm,
@@ -103,7 +112,8 @@ impl SimpleWall {
 		let stride = self.width as i32 * 4;
 		
 		let (buffer, canvas) = self.pool.create_buffer(self.width as i32, self.height as i32, stride, Format::Xrgb8888).unwrap();
-		canvas.fill(0); // black
+		
+		self.wallpaper.resize_into(self.width, self.height, canvas);
 		
 		self.layer.wl_surface().damage_buffer(0, 0, self.width as i32, self.height as i32);
 		
