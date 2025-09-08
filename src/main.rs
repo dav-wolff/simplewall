@@ -6,6 +6,7 @@ use std::{
 
 mod wallpaper;
 use clap::Parser;
+use image::ImageFormat;
 use wallpaper::Wallpaper;
 
 mod wayland;
@@ -19,6 +20,9 @@ mod wayland;
 struct Args {
 	/// The image to use as a wallpaper
 	wallpaper: PathBuf,
+	/// The format of the image (i.e. jpg, png). By default the file extension is used to determine this.
+	#[arg(short, long)]
+	format: Option<String>,
 	/// The namespace to use for the layer shell surface
 	#[arg(short, long, default_value = "wallpaper")]
 	namespace: String,
@@ -38,7 +42,7 @@ fn main() {
 	let mut args = Args::parse();
 	
 	loop {
-		wallpapers.push((args.wallpaper, args.namespace));
+		wallpapers.push((args.wallpaper, args.format, args.namespace));
 		
 		match args.more {
 			Some(more) => {
@@ -53,9 +57,12 @@ fn main() {
 	// only load wallpapers after all arguments were parsed without errors
 	
 	let wallpapers: Vec<_> = wallpapers.into_iter()
-		.map(|(path, namespace)| -> Result<_, Box<dyn Error>> {
+		.map(|(path, format, namespace)| -> Result<_, Box<dyn Error>> {
+			let format = format.map(|format|
+				ImageFormat::from_extension(format).expect("Unknown format: {format}")
+			);
 			Ok(WallpaperOptions {
-				wallpaper: Wallpaper::load(&path)?,
+				wallpaper: Wallpaper::load(&path, format)?,
 				namespace,
 			})
 		})

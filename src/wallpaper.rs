@@ -2,11 +2,20 @@ use std::{
 	error::Error,
 	ops::Deref,
 	path::Path,
-	time::Instant
+	time::Instant,
 };
 
-use image::{ImageReader, RgbImage};
-use fast_image_resize::{images::Image, FilterType, ResizeAlg, ResizeOptions};
+use image::{
+	ImageFormat,
+	ImageReader,
+	RgbImage,
+};
+use fast_image_resize::{
+	images::Image,
+	FilterType,
+	ResizeAlg,
+	ResizeOptions,
+};
 
 #[derive(Debug)]
 pub struct Wallpaper {
@@ -14,11 +23,16 @@ pub struct Wallpaper {
 }
 
 impl Wallpaper {
-	pub fn load(path: &Path) -> Result<Self, Box<dyn Error>> {
+	pub fn load(path: &Path, format: Option<ImageFormat>) -> Result<Self, Box<dyn Error>> {
 		let start = Instant::now();
 		
-		let image = ImageReader::open(path)?
-			.decode()?;
+		let mut reader = ImageReader::open(path)?;
+		
+		if let Some(format) = format {
+			reader.set_format(format);
+		}
+		
+		let image = reader.decode()?;
 		
 		let duration = start.elapsed();
 		
