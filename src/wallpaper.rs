@@ -8,6 +8,7 @@ use std::{
 use image::{ImageReader, RgbImage};
 use fast_image_resize::{images::Image, FilterType, ResizeAlg, ResizeOptions};
 
+#[derive(Debug)]
 pub struct Wallpaper {
 	image: RgbImage,
 }
