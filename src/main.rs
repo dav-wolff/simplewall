@@ -61,7 +61,5 @@ fn main() {
 		})
 		.collect::<Result<_, _>>().unwrap();
 	
-	assert_eq!(wallpapers.len(), 1, "multiple wallpapers not yet implemented");
-	
-	wayland::run(wallpapers.into_iter().next().unwrap());
+	wayland::run(wallpapers);
 }

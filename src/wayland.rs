@@ -1,6 +1,10 @@
+use std::collections::HashMap;
+
 use wayland_client::{
 	Connection,
 	QueueHandle,
+	Proxy,
+	backend::ObjectId,
 	globals::registry_queue_init,
 	protocol::wl_shm::Format,
 	protocol::wl_surface::WlSurface,
@@ -26,7 +30,7 @@ use crate::{
 	WallpaperOptions
 };
 
-pub fn run(wallpaper_options: WallpaperOptions) {
+pub fn run(wallpapers: Vec<WallpaperOptions>) {
 	let conn = Connection::connect_to_env().unwrap();
 	
 	let (globals, mut event_queue) = registry_queue_init(&conn).unwrap();
@@ -36,46 +40,76 @@ pub fn run(wallpaper_options: WallpaperOptions) {
 	let layer_shell = LayerShell::bind(&globals, &qh).expect("layer shell is not available");
 	let shm = Shm::bind(&globals, &qh).expect("wl_shm is not available");
 	
-	let surface = compositor.create_surface(&qh);
-	let layer = layer_shell.create_layer_surface(&qh, surface, Layer::Background, Some(wallpaper_options.namespace), None);
-	layer.set_anchor(Anchor::LEFT | Anchor::RIGHT | Anchor::TOP | Anchor::BOTTOM);
-	layer.set_keyboard_interactivity(smithay_client_toolkit::shell::wlr_layer::KeyboardInteractivity::None);
-	layer.set_exclusive_zone(-1); // ignore other exclusive zones
-	layer.commit();
-	
 	// TODO what does the len do?
 	// can't know the resolution yet, but setting a smaller number seems to work just fine
-	let pool = SlotPool::new(2560 * 1440 * 4, &shm).expect("failed to create pool");
+	let pool = SlotPool::new(2560 * 1440 * 4 * wallpapers.len(), &shm).expect("failed to create pool");
+	
+	let mut wallpaper_surfaces = HashMap::new();
+	
+	for wallpaper_options in wallpapers {
+		let surface = compositor.create_surface(&qh);
+		let surface_id = surface.id();
+		let layer_surface = layer_shell.create_layer_surface(&qh, surface, Layer::Background, Some(wallpaper_options.namespace), None);
+		layer_surface.set_anchor(Anchor::LEFT | Anchor::RIGHT | Anchor::TOP | Anchor::BOTTOM);
+		layer_surface.set_keyboard_interactivity(smithay_client_toolkit::shell::wlr_layer::KeyboardInteractivity::None);
+		layer_surface.set_exclusive_zone(-1); // ignore other exclusive zones
+		layer_surface.commit();
+		
+		let wallpaper_surface = WallpaperSurface {
+			wallpaper: wallpaper_options.wallpaper,
+			surface: layer_surface,
+		};
+		
+		wallpaper_surfaces.insert(surface_id, wallpaper_surface);
+	}
 	
 	let mut simple_wall = SimpleWall {
-		wallpaper: wallpaper_options.wallpaper,
+		wallpapers: wallpaper_surfaces,
 		registry_state: RegistryState::new(&globals),
 		output_state: OutputState::new(&globals, &qh),
 		shm,
 		pool,
-		layer,
-		closed: false,
-		is_configured: false,
-		width: 0,
-		height: 0,
 	};
 	
-	while !simple_wall.closed {
+	while !simple_wall.all_closed() {
 		event_queue.blocking_dispatch(&mut simple_wall).unwrap();
 	}
 }
 
-struct SimpleWall {
+struct WallpaperSurface {
 	wallpaper: Wallpaper,
+	surface: LayerSurface,
+}
+
+struct SimpleWall {
+	wallpapers: HashMap<ObjectId, WallpaperSurface>,
 	registry_state: RegistryState,
 	output_state: OutputState,
 	shm: Shm,
 	pool: SlotPool,
-	layer: LayerSurface,
-	closed: bool,
-	is_configured: bool,
-	width: u32,
-	height: u32,
+}
+
+impl WallpaperSurface {
+	fn draw(&mut self, (width, height): (u32, u32), pool: &mut SlotPool, qh: &QueueHandle<SimpleWall>) {
+		let stride = width as i32 * 4;
+		
+		let (buffer, canvas) = pool.create_buffer(width as i32, height as i32, stride, Format::Xrgb8888).unwrap();
+		
+		self.wallpaper.resize_into(width, height, canvas);
+		
+		self.surface.wl_surface().damage_buffer(0, 0, width as i32, height as i32);
+		
+		self.surface.wl_surface().frame(qh, self.surface.wl_surface().clone());
+		
+		buffer.attach_to(self.surface.wl_surface()).unwrap();
+		self.surface.commit();
+	}
+}
+
+impl SimpleWall {
+	fn all_closed(&self) -> bool {
+		self.wallpapers.is_empty()
+	}
 }
 
 impl LayerShellHandler for SimpleWall {
@@ -83,42 +117,29 @@ impl LayerShellHandler for SimpleWall {
 		&mut self,
 		_conn: &Connection,
 		_qh: &QueueHandle<Self>,
-		_layer: &LayerSurface
+		layer: &LayerSurface
 	) {
-		self.closed = true;
+		let id = layer.wl_surface().id();
+		self.wallpapers.remove(&id);
 	}
 	
 	fn configure(
 		&mut self,
 		_conn: &Connection,
 		qh: &QueueHandle<Self>,
-		_layer: &LayerSurface,
+		layer: &LayerSurface,
 		configure: smithay_client_toolkit::shell::wlr_layer::LayerSurfaceConfigure,
 		_serial: u32,
 	) {
-		(self.width, self.height) = configure.new_size;
+		let id = layer.wl_surface().id();
+		let wallpaper = self.wallpapers.get_mut(&id).expect("Received configure event for surface with unknown id: {id}");
+		wallpaper.draw(configure.new_size, &mut self.pool, qh);
 		
-		if !self.is_configured {
-			self.is_configured = true;
-			self.draw(qh);
-		}
-	}
-}
-
-impl SimpleWall {
-	fn draw(&mut self, qh: &QueueHandle<Self>) {
-		let stride = self.width as i32 * 4;
-		
-		let (buffer, canvas) = self.pool.create_buffer(self.width as i32, self.height as i32, stride, Format::Xrgb8888).unwrap();
-		
-		self.wallpaper.resize_into(self.width, self.height, canvas);
-		
-		self.layer.wl_surface().damage_buffer(0, 0, self.width as i32, self.height as i32);
-		
-		self.layer.wl_surface().frame(qh, self.layer.wl_surface().clone());
-		
-		buffer.attach_to(self.layer.wl_surface()).unwrap();
-		self.layer.commit();
+		// TODO: why does the example do this? shouldn't the surface be redrawn every time it's resized? when does configure get called?
+		// if !self.is_configured {
+		// 	self.is_configured = true;
+		// 	self.draw(qh);
+		// }
 	}
 }
 
