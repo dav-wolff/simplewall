@@ -23,5 +23,6 @@ in craneLib.buildPackage (commonArgs // {
 	meta = {
 		description = "Simple wallpaper utility for Wayland compositors with layer shell support";
 		mainProgram = "simplewall";
+		license = with lib.licenses; [ mit ];
 	};
 })

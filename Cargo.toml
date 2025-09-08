@@ -4,6 +4,7 @@ description = "Simple wallpaper utility for Wayland compositors with layer shell
 version = "0.1.0-wip"
 edition = "2024"
 authors = ["David Wolff"]
+license = "MIT"
 repository = "https://github.com/dav-wolff/simplewall"
 
 [dependencies]
