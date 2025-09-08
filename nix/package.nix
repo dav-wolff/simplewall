@@ -19,4 +19,9 @@ let
 	cargoArtifacts = craneLib.buildDepsOnly commonArgs;
 in craneLib.buildPackage (commonArgs // {
 	inherit cargoArtifacts;
+	
+	meta = {
+		description = "Simple wallpaper utility for Wayland compositors with layer shell support";
+		mainProgram = "simplewall";
+	};
 })
